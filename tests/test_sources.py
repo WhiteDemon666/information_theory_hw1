@@ -2,6 +2,7 @@
 import random
 import unittest
 from fractions import Fraction
+from pathlib import Path
 
 from probabilities import InputError, parse_probability, parse_distribution
 from sources import load_source, empirical_frequency
@@ -47,7 +48,7 @@ class ProbabilityTests(unittest.TestCase):
 class PeriodicSourceTests(unittest.TestCase):
     def setUp(self):
         self.source = load_source(
-            "tests/legacy_example.json"
+            str(Path(__file__).resolve().parent / "legacy_example.json")
         )
 
     def test_period(self):
