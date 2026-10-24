@@ -7,38 +7,34 @@ class InputError(ValueError):
 
 
 def parse_probability(value: str) -> Fraction:
-    value = value.strip()
-    value = value.replace("∕", "/").replace("⁄", "/")
-
+    if not isinstance(value, str):
+        raise InputError("Probability must be a string")
+    value = value.strip().replace("∕", "/").replace("⁄", "/")
     if "/" in value:
-        numerator, denominator = value.split("/", 1)
-
         try:
+            numerator, denominator = value.split("/")
             result = Fraction(int(numerator), int(denominator))
-        except (ValueError, ZeroDivisionError):
-            raise InputError(f"Invalid probability: {value}")
+        except (ValueError, ZeroDivisionError) as exc:
+            raise InputError(f"Invalid probability: {value}") from exc
     else:
         try:
-            result = Fraction(Decimal(value))
-        except InvalidOperation:
-            raise InputError(f"Invalid probability: {value}")
-
+            decimal = Decimal(value)
+            if not decimal.is_finite():
+                raise InputError(f"Invalid probability: {value}")
+            result = Fraction(decimal)
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            raise InputError(f"Invalid probability: {value}") from exc
     if result < 0:
         raise InputError(f"Negative probability: {value}")
-
+    if result > 1:
+        raise InputError(f"Probability exceeds one: {value}")
     return result
 
 
 def parse_distribution(data: dict[str, str]) -> dict[str, Fraction]:
-    if not data:
-        raise InputError("Distribution must not be empty")
-
-    result = {}
-
-    for symbol, probability in data.items():
-        result[symbol] = parse_probability(probability)
-
-    if sum(result.values(), Fraction(0, 1)) != 1:
+    if not isinstance(data, dict) or not data:
+        raise InputError("Distribution must be a non-empty object")
+    result = {key: parse_probability(value) for key, value in data.items()}
+    if sum(result.values(), Fraction(0)) != 1:
         raise InputError("Distribution is not normalized")
-
     return result

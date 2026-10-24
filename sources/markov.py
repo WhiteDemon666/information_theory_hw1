@@ -1,6 +1,7 @@
 import random
 from dataclasses import dataclass
 from fractions import Fraction
+from itertools import islice
 
 from probabilities import InputError
 from .common import sample_distribution
@@ -10,25 +11,9 @@ from .common import sample_distribution
 class MarkovSource:
     alphabet: list[str]
     depth: int
-
-    initial: dict[
-        tuple[str, ...],
-        Fraction
-    ]
-
-    models: dict[
-        str,
-        dict[
-            tuple[str, ...],
-            dict[str, Fraction]
-        ]
-    ]
-
-    switches: dict[
-        str,
-        dict[str, Fraction]
-    ]
-
+    initial: dict[tuple[str, ...], Fraction]
+    models: dict[str, dict[tuple[str, ...], dict[str, Fraction]]]
+    switches: dict[str, dict[str, Fraction]]
     source: list[str]
 
     @property
@@ -36,160 +21,103 @@ class MarkovSource:
         return len(self.source)
 
     def distribution_at(
-            self,
-            context: tuple[str, ...],
-            position: int) -> dict[str, Fraction]:
-
-        switch_name = self.source[
-            position % self.period
-            ]
-
+        self, context: tuple[str, ...], position: int
+    ) -> dict[str, Fraction]:
+        """P(X_position=a | последние depth символов = context)"""
+        switch_name = self.source[position % self.period]
         switch = self.switches[switch_name]
+        result: dict[str, Fraction] = {}
 
-        result = {}
         for model_name, model_probability in switch.items():
+            # если модель невозможна, то пропускаем
+            if model_probability == 0:
+                continue
 
             model = self.models[model_name]
             if context not in model:
                 raise InputError(
-                    f"Missing context {context} "
-                    f"in model {model_name}"
+                    f"Missing context {context} in model {model_name}"
                 )
-
-            distribution = model[context]
-            for symbol, symbol_probability in distribution.items():
+            for symbol, symbol_probability in model[context].items():
                 result[symbol] = (
-                        result.get(
-                            symbol,
-                            Fraction(0, 1),
-                        )
-                        + model_probability
-                        * symbol_probability
+                    result.get(symbol, Fraction(0))
+                    + model_probability * symbol_probability
                 )
 
         return result
 
     def stream(self, rng: random.Random):
-        context = sample_distribution(
-            self.initial,
-            rng,
-        )
-
-        result = list(context)
-        for symbol in result:
+        context = sample_distribution(self.initial, rng)
+        for symbol in context:
             yield symbol
 
         position = self.depth
         while True:
-            context = tuple(
-                result[-self.depth:]
-            )
-
-            distribution = self.distribution_at(
-                context,
-                position,
-            )
-
-            symbol = sample_distribution(
-                distribution,
-                rng,
-            )
-
+            distribution = self.distribution_at(context, position)
+            symbol = sample_distribution(distribution, rng)
             yield symbol
-            result.append(symbol)
-
-            if len(result) > self.depth:
-                result = result[-self.depth:]
-
+            context = context[1:] + (symbol,)
             position += 1
 
-    def generate(
-            self,
-            n: int,
-            rng: random.Random,
-    ) -> list[str]:
-
-        generator = self.stream(rng)
-
-        return [
-            next(generator)
-            for _ in range(n)
-        ]
+    def generate(self, n: int, rng: random.Random) -> list[str]:
+        if n < 0:
+            raise InputError("N must be non-negative")
+        return list(islice(self.stream(rng), n))
 
     def block_probability(
-            self,
-            block: list[str],
-            start_position: int = 0) -> Fraction:
-
+        self, block: list[str], start_position: int = 0
+    ) -> Fraction:
         if not block:
-            raise InputError(
-                "Block must not be empty"
+            raise InputError("Block must not be empty")
+        if start_position < 0:
+            raise InputError("Start position must be non-negative")
+        if any(symbol not in self.alphabet for symbol in block):
+            return Fraction(0)
+
+        end_position = start_position + len(block)
+        states: dict[tuple[str, ...], Fraction] = {}
+
+        # первые d символов
+        for context, p in self.initial.items():
+            if p == 0:
+                continue
+            valid = all(
+                context[i] == block[i - start_position]
+                for i in range(start_position, min(self.depth, end_position))
             )
-
-        states = dict(self.initial)
-        end_position = (
-                start_position + len(block)
-        )
-
-        # учитываем символы блока, которые могут лежать внутри стартвого контекста
-        filtered_states = {}
-        for context, probability in states.items():
-            valid = True
-            for position in range(min(self.depth, end_position)):
-                if position < start_position:
-                    continue
-
-                expected = block[position - start_position]
-                if context[position] != expected:
-                    valid = False
-                    break
             if valid:
-                filtered_states[context] = probability
-        states = filtered_states
+                states[context] = p
 
-        # после d первых символов
-        for position in range(
-                self.depth,
-                end_position):
+        if end_position <= self.depth:
+            return sum(states.values(), Fraction(0))
 
-            new_states = {}
+        # после начального d-блока
+        for position in range(self.depth, end_position):
+            next_states: dict[tuple[str, ...], Fraction] = {}
+            required = (
+                block[position - start_position]
+                if position >= start_position else None
+            )
             for context, state_probability in states.items():
-                distribution = self.distribution_at(
-                    context,
-                    position)
-                for symbol, probability in distribution.items():
-                    if position >= start_position:
-                        expected = block[position - start_position]
-                        if symbol != expected:
-                            continue
-
-                    new_context = (
-                            context[1:] + (symbol,)
+                distribution = self.distribution_at(context, position)
+                for symbol, transition_probability in distribution.items():
+                    if transition_probability == 0:
+                        continue
+                    if required is not None and symbol != required:
+                        continue
+                    new_context = context[1:] + (symbol,)
+                    next_states[new_context] = (
+                        next_states.get(new_context, Fraction(0))
+                        + state_probability * transition_probability
                     )
+            states = next_states
+            if not states:
+                return Fraction(0)
 
-                    new_states[new_context] = (
-                            new_states.get(
-                                new_context,
-                                Fraction(0, 1),
-                            )
-                            + state_probability
-                            * probability
-                    )
+        return sum(states.values(), Fraction(0))
 
-            states = new_states
-
+    def average_block_probability(self, block: list[str]) -> Fraction:
         return sum(
-            states.values(),
-            Fraction(0, 1),
-        )
-
-    def average_block_probability(
-            self,
-            block: list[str]) -> Fraction:
-
-        total = Fraction(0, 1)
-        for start_position in range(
-                self.period
-        ):
-            total += self.block_probability(block, start_position)
-        return total / self.period
+            (self.block_probability(block, j) for j in range(self.period)),
+            Fraction(0),
+        ) / self.period
