@@ -8,6 +8,11 @@ from sources import load_source, empirical_frequency
 
 def build_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--variant",
+        action="version",
+        version="s=11; k=3, M=4, L=4, d=3, q=7, epsilon=10^-4",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     generate_parser = subparsers.add_parser("generate")
