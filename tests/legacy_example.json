@@ -1,0 +1,12 @@
+{
+  "models": {
+    "coin_1": {"0": "1/3", "1": "2/3"},
+    "coin_2": {"0": "2/3", "1": "1/3"}
+  },
+  "switches": {
+    "switch_1": {"coin_1": "1/2", "coin_2": "1/2"},
+    "switch_2": {"coin_1": "0.3", "coin_2": "0.7"},
+    "switch_3": {"coin_1": "0.4", "coin_2": "0.6"}
+  },
+  "source": ["switch_1", "switch_2", "switch_3", "switch_2"]
+}
