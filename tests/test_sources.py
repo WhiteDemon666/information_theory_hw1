@@ -1,3 +1,4 @@
+# GPT generated
 import random
 import unittest
 from fractions import Fraction
