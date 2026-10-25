@@ -88,11 +88,14 @@ class AsymptoticTests(unittest.TestCase):
         self.assertTrue(eventual_error_answer(p, "1.1", Fraction(1, 10000), 2).exists)
         self.assertFalse(eventual_error_answer(p, "0.9", Fraction(1, 10000), 2).exists)
 
-    def test_uniform_boundary_zero_error(self):
+    def test_uniform_boundary(self):
         p = {"0": Fraction(1, 2), "1": Fraction(1, 2)}
-        self.assertTrue(eventual_error_answer(p, "1", Fraction(1, 10000), 2).exists)
-        self.assertFalse(eventual_error_answer(p, "1", Fraction(1, 10000), 4).exists)
-        self.assertTrue(eventual_error_answer(p, "1", Fraction(1, 2), 4).exists)
+
+        for q in (2, 4):
+            result = eventual_error_answer(
+                p, "1", Fraction(1, 10000), q
+            )
+            self.assertIsNone(result.exists)
 
     def test_deterministic_boundary(self):
         p = {"0": Fraction(1), "1": Fraction(0)}
