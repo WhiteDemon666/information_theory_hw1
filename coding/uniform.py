@@ -68,18 +68,21 @@ class UniformResult:
     total_words: int
     error: Fraction
 
-    # (числа символов, сколько выбрано, размер типа, целый вес)
     selected_types: list[tuple[tuple[int, ...], int, int, int]]
     denominator: int
     alphabet: list[str]
+
     def compact_code_description(self) -> dict:
         return {
             "alphabet": self.alphabet,
             "source_block_length": self.n,
             "code_alphabet_size": self.q,
             "codeword_length": self.ell,
+            "all_blocks_encoded": self.capacity >= self.total_words,
             "selection_rule": (
-                "Типы рассматриваются в указанном порядке. "
+                "Если all_blocks_encoded=true, все блоки перечисляются "
+                "в лексикографическом порядке символов алфавита. "
+                "Иначе типы рассматриваются в указанном порядке. "
                 "Внутри каждого типа выбираются первые take различных блоков "
                 "в лексикографическом порядке символов алфавита. "
                 "Выбранным блокам последовательно присваиваются индексы 0, 1, 2, ... . "
@@ -101,7 +104,6 @@ def optimal_uniform_code(
     q: int,
     *,
     with_description: bool = False,) -> UniformResult:
-
     if not distribution or sum(distribution.values(), Fraction(0)) != 1:
         raise InputError("Source distribution must be normalized")
     if any(p < 0 for p in distribution.values()):
@@ -125,7 +127,7 @@ def optimal_uniform_code(
     integer_weights = [p.numerator * (D // p.denominator) for p in probs]
     Dn = D ** n
 
-    if K >= total_words and not with_description:
+    if K >= total_words:
         return UniformResult(n, q, ell, K, total_words, Fraction(0), [], D, alphabet)
 
     powers = [
@@ -159,7 +161,4 @@ def optimal_uniform_code(
 
     # P_e = (D^n - S) / D^n
     error = Fraction(Dn - accepted_weight, Dn)
-    return UniformResult(
-        n, q, ell, K, total_words,
-        error, selected_types, D, alphabet
-    )
+    return UniformResult(n, q, ell, K, total_words, error, selected_types, D, alphabet)
