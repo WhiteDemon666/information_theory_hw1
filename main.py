@@ -11,6 +11,7 @@ from sources import load_source, empirical_frequency
 from coding.asymptotic import eventual_error_answer
 from coding.checks import check_memoryless_stationary
 from coding.uniform import optimal_uniform_code, source_entropy
+from archiver import compress_file, decompress_file
 
 
 def build_parser():
@@ -44,6 +45,18 @@ def build_parser():
     code_parser.add_argument("--n-max", type=int, default=50)
     code_parser.add_argument("--code-n", type=int)
     code_parser.add_argument("--output", default="uniform_code.json")
+    # Архиватор: обычная компрессия и восстановление двоичных файлов.
+    compress_parser = subparsers.add_parser("compress")
+    compress_parser.add_argument("file")
+    compress_parser.add_argument("--output")
+    compress_parser.add_argument("--force", action="store_true")
+    compress_parser.add_argument("--stats", action="store_true")
+
+    decompress_parser = subparsers.add_parser("decompress")
+    decompress_parser.add_argument("file")
+    decompress_parser.add_argument("--output")
+    decompress_parser.add_argument("--force", action="store_true")
+
     return parser
 
 
@@ -158,6 +171,27 @@ def run_uniform_code(args):
     print(f"Описание кода для n={code_n} сохранено: {args.output}")
 
 
+def run_compress(args):
+    # Алгоритм делает два прохода по входному файлу
+    stats = compress_file(args.file, args.output, force=args.force)
+    print("Сжатие завершено")
+    if args.stats:
+        print(f"Энтропия H: {stats.entropy:.8f} бит/байт")
+        print(f"Средняя длина кода: {stats.average_length:.8f} бит/байт")
+        print(f"Размер заголовка: {stats.header_bytes} байт")
+        print(f"Размер данных: {stats.data_bytes} байт")
+        print(f"Размер архива: {stats.compressed_bytes} байт")
+        if stats.compression_ratio is None:
+            print("Коэффициент сжатия (архив/исходный): не определён для пустого файла")
+        else:
+            print(f"Коэффициент сжатия (архив/исходный): {stats.compression_ratio:.6f}")
+
+
+def run_decompress(args):
+    decompress_file(args.file, args.output, force=args.force)
+    print("Файл успешно восстановлен, контрольная сумма совпала")
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -170,7 +204,11 @@ def main():
             run_uniform_check(args)
         elif args.command == "uniform-code":
             run_uniform_code(args)
-    except (InputError, BrokenPipeError) as exc:
+        elif args.command == "compress":
+            run_compress(args)
+        elif args.command == "decompress":
+            run_decompress(args)
+    except (InputError, BrokenPipeError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     return 0
